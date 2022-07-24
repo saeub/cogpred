@@ -11,6 +11,7 @@ def crossvalidate(
     subjects: Sequence[Subject],
     num_folds: int,
     model_kwargs: Dict[str, Any],
+    device: str,
 ):
     fold_size = len(subjects) // num_folds
     fold_scores = {}
@@ -22,7 +23,7 @@ def crossvalidate(
         train_subjects = subjects[:validate_start] + subjects[test_end:]
         validate_subjects = subjects[validate_start:validate_end]
         test_subjects = subjects[test_start:test_end]
-        model = model_class(**model_kwargs)
+        model = model_class(**model_kwargs, device=device)
         model.train(train_subjects, validate_subjects)
         scores = model.evaluate(test_subjects)
         for metric, score in scores.items():

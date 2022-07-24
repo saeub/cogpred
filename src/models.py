@@ -93,10 +93,11 @@ class CNN(Model):
             assert y.size(1) == 1
             return y
 
-    def __init__(self, *, epochs: int = 10, batch_size: int = 8):
+    def __init__(self, *, epochs: int = 10, batch_size: int = 8, device: str = "cpu"):
         self.epochs = epochs
         self.batch_size = batch_size
-        self.module = self._Module()
+        self.device = device
+        self.module = self._Module().to(self.device)
 
     def _standardize_label(self, label: float) -> float:
         return (label - self.label_mean) / self.label_std
@@ -121,6 +122,8 @@ class CNN(Model):
             )
             epoch_loss = 0
             for X, y in loader:
+                X = X.to(self.device)
+                y = y.to(self.device)
                 y = self._standardize_label(y)
                 optimizer.zero_grad()
                 y_pred = self.module(X)
@@ -135,6 +138,7 @@ class CNN(Model):
         # TODO: Use configurable batch size
         self.module.eval()
         X = torch.tensor(subject.eeg, dtype=torch.float32)
+        X = X.to(self.device)
         y_pred = self.module(X)
         y_pred = torch.mean(y_pred).item()
         y_pred = self._unstandardize_label(y_pred)

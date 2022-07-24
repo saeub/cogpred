@@ -17,7 +17,7 @@ def main():
     subjects = [Subject.load(subject_id) for subject_id in subject_ids]
 
     print("Training...")
-    mean_scores = crossvalidate(models.CNN, subjects, 10)
+    mean_scores = crossvalidate(models.CNN, subjects, 10, {}, device="cpu")
     print(mean_scores)
 
 
