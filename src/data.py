@@ -11,20 +11,18 @@ import const as C
 @dataclass
 class Subject:
     id: str
-    eeg: np.ndarray
+    eeg: torch.Tensor
     pta: float
 
     @staticmethod
     def load(subject_id: str) -> "Subject":
-        # TODO: Load directly to GPU
-        eeg = np.load(C.EEG_DATA_PATH / f"{subject_id}.npy")
+        eeg = torch.load(C.EEG_DATA_PATH / f"{subject_id}.pt")
         pta = pd.read_csv(C.PTA_DATA_PATH, index_col="pbn_code")["PTA"][subject_id]
         return Subject(subject_id, eeg, pta)
 
     @staticmethod
     def ids() -> List[str]:
-        all_ids = [path.stem for path in C.EEG_DATA_PATH.iterdir()]
-        return [id for id in all_ids if id not in ["4a71bn", "57yhxc"]]
+        return [path.stem for path in C.EEG_DATA_PATH.iterdir()]
 
 
 class EEGDataset(torch.utils.data.Dataset):
@@ -34,7 +32,7 @@ class EEGDataset(torch.utils.data.Dataset):
             [
                 [subject.pta]
                 for subject in subjects
-                for trial in range(subject.eeg.shape[0])
+                for trial in range(subject.eeg.size(0))
             ]
         )
         assert self.X.shape[0] == self.y.shape[0]

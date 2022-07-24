@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Tuple
 
 import mne
-import numpy as np
+import torch
 
 import const as C
 
@@ -13,7 +13,7 @@ def preprocess(
     *,
     filter: Tuple[float, float],
     resample: float,
-) -> np.ndarray:
+) -> torch.Tensor:
     raw = mne.io.read_raw_bdf(infile_path, preload=True)
 
     # Filter
@@ -52,10 +52,11 @@ def preprocess(
     epochs = mne.Epochs(
         raw, events, C.EVENT_QUIET_START, tmin=-0.2, tmax=10.0, preload=True
     )
+    assert len(epochs) == 30
     epochs.resample(resample)
     epochs.reorder_channels(C.CHANNELS)
 
-    return epochs.get_data()
+    return torch.from_numpy(epochs.get_data())
 
 
 def parse_args() -> argparse.Namespace:
@@ -75,6 +76,6 @@ if __name__ == "__main__":
             / "EEG1"
             / f"{subject_id}_Termin1_CogTAiL.bdf"
         )
-        outfile_path = C.EEG_DATA_PATH / subject_id
+        outfile_path = C.EEG_DATA_PATH / f"{subject_id}.pt"
         data = preprocess(infile_path, filter=args.filter, resample=args.resample)
-        np.save(outfile_path, data)
+        torch.save(data, outfile_path)
