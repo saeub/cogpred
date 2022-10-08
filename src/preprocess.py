@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Tuple
 
 import mne
+import numpy as np
 import torch
 
 import const as C
@@ -13,6 +14,7 @@ def preprocess(
     *,
     filter: Tuple[float, float],
     resample: float,
+    tfr: bool,
 ) -> torch.Tensor:
     raw = mne.io.read_raw_bdf(infile_path, preload=True)
 
@@ -56,6 +58,12 @@ def preprocess(
     epochs.resample(resample)
     epochs.reorder_channels(C.CHANNELS)
 
+    if tfr:
+        start_freq = max(filter[0], 1.0)
+        end_freq = filter[1]
+        freqs = (end_freq - start_freq + 1) ** (np.arange(C.TFR_RESOLUTION) / C.TFR_RESOLUTION) + start_freq - 1
+        tfr_epochs = mne.time_frequency.tfr_morlet(epochs, freqs, 5, average=False, return_itc=False)
+        return torch.from_numpy(tfr_epochs.data)
     return torch.from_numpy(epochs.get_data())
 
 
@@ -63,12 +71,14 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("subjects", nargs="+")
     parser.add_argument("--filter", nargs=2, default=(0.1, 45.0))
-    parser.add_argument("--resample", default=128)
+    parser.add_argument("--resample", default=128.0)
+    parser.add_argument("--tfr", action="store_true")
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
+    failed = []
     for subject_id in args.subjects:
         infile_path = (
             C.RAW_EEG_DATA_PATH
@@ -76,6 +86,18 @@ if __name__ == "__main__":
             / "EEG1"
             / f"{subject_id}_Termin1_CogTAiL.bdf"
         )
-        outfile_path = C.EEG_DATA_PATH / f"{subject_id}.pt"
-        data = preprocess(infile_path, filter=args.filter, resample=args.resample)
-        torch.save(data, outfile_path)
+        if args.tfr:
+            outfile_path = C.EEG_DATA_PATH / f"{subject_id}.tfr.pt"
+        else:
+            outfile_path = C.EEG_DATA_PATH / f"{subject_id}.pt"
+        try:
+            data = preprocess(
+                infile_path, filter=args.filter, resample=args.resample, tfr=args.tfr
+            )
+            torch.save(data, outfile_path)
+        except Exception as e:
+            print(f"Preprocessing subject {subject_id} failed:\n{e}")
+            failed.append(subject_id)
+            continue
+    if len(failed) > 0:
+        print(f"Subjects failed: {', '.join(failed)}")
