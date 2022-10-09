@@ -55,7 +55,6 @@ def preprocess(
         raw, events, C.EVENT_QUIET_START, tmin=-0.2, tmax=10.0, preload=True
     )
     assert len(epochs) == 30
-    epochs.resample(resample)
     epochs.reorder_channels(C.CHANNELS)
 
     if tfr:
@@ -63,13 +62,17 @@ def preprocess(
         end_freq = filter[1]
         freqs = (end_freq - start_freq + 1) ** (np.arange(C.TFR_RESOLUTION) / C.TFR_RESOLUTION) + start_freq - 1
         tfr_epochs = mne.time_frequency.tfr_morlet(epochs, freqs, 5, average=False, return_itc=False)
-        return torch.from_numpy(tfr_epochs.data)
-    return torch.from_numpy(epochs.get_data())
+        array = tfr_epochs.data
+    else:
+        array = epochs.get_data()
+
+    array = mne.filter.resample(array, resample, epochs.info["sfreq"])
+    return torch.from_numpy(array)
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("subjects", nargs="+")
+    parser.add_argument("--subjects", nargs="+")
     parser.add_argument("--filter", nargs=2, default=(0.1, 45.0))
     parser.add_argument("--resample", default=128.0)
     parser.add_argument("--tfr", action="store_true")
@@ -79,7 +82,8 @@ def parse_args() -> argparse.Namespace:
 if __name__ == "__main__":
     args = parse_args()
     failed = []
-    for subject_id in args.subjects:
+    subject_ids = args.subjects or C.SUBJECT_IDS
+    for subject_id in subject_ids:
         infile_path = (
             C.RAW_EEG_DATA_PATH
             / subject_id

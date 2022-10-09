@@ -2,3 +2,4 @@ mne
 torch
 numpy
 scikit-learn
+pandas

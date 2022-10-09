@@ -4,20 +4,35 @@ import const as C
 
 random.seed(C.RANDOM_SEED)
 
+import argparse
+import logging
+from typing import Optional, Sequence
+
 import models
 from crossvalidation import crossvalidate
 from data import Subject
 
+logger = logging.Logger(__name__)
 
-def main():
-    subject_ids = Subject.ids()
+
+def parse_args(argv: Optional[Sequence[str]]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--gpu", type=int)
+    return parser.parse_args(argv)
+
+
+def main(argv: Optional[Sequence[str]] = None):
+    args = parse_args(argv)
+    device = "cpu" if args.gpu is None else f"cuda:{args.gpu}"
+
+    subject_ids = C.SUBJECT_IDS[:]
     random.shuffle(subject_ids)
 
-    print("Loading...")
-    subjects = [Subject.load(subject_id) for subject_id in subject_ids]
+    logger.info("Loading...")
+    subjects = [Subject.load(subject_id, tfr=True) for subject_id in subject_ids]
 
-    print("Training...")
-    mean_scores = crossvalidate(models.CNN, subjects, 10, {}, device="cpu")
+    logger.info("Training...")
+    mean_scores = crossvalidate(models.TFRCNN, subjects, 6, {}, device=device)
     print(mean_scores)
 
 

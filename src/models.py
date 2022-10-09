@@ -93,7 +93,7 @@ class CNN(Model):
             assert y.size(1) == 1
             return y
 
-    def __init__(self, *, epochs: int = 10, batch_size: int = 8, device: str = "cpu"):
+    def __init__(self, *, epochs: int = 20, batch_size: int = 8, device: str = "cpu"):
         self.epochs = epochs
         self.batch_size = batch_size
         self.device = device
@@ -131,15 +131,43 @@ class CNN(Model):
                 loss.backward()
                 optimizer.step()
                 epoch_loss += loss.item()
-            val_mse = self.evaluate(validate_subjects)
-            print(f"Epoch {epoch}: loss={epoch_loss}, val_mse={val_mse}")
+            val_metrics = self.evaluate(validate_subjects)
+            print(f"Epoch {epoch}: loss={epoch_loss}, val_metrics={val_metrics}")
 
     def predict(self, subject: Subject) -> float:
         # TODO: Use configurable batch size
         self.module.eval()
-        X = torch.tensor(subject.eeg, dtype=torch.float32)
+        X = subject.eeg
         X = X.to(self.device)
         y_pred = self.module(X)
         y_pred = torch.mean(y_pred).item()
         y_pred = self._unstandardize_label(y_pred)
         return y_pred
+
+
+class TFRCNN(CNN):
+    class _Module(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.layers = nn.ModuleList(
+                [
+                    nn.Flatten(1, 2),  # Combine channel and frequency dimensions
+                    nn.LayerNorm([6400, 41]),
+                    nn.Conv1d(6400, 64, kernel_size=4),
+                    nn.MaxPool1d(2),
+                    nn.LayerNorm([64, 19]),
+                    nn.Conv1d(64, 32, kernel_size=4),
+                    nn.MaxPool1d(2),
+                    nn.LayerNorm([32, 8]),
+                    nn.Flatten(),
+                    nn.Linear(256, 16),
+                    nn.Linear(16, 1),
+                ]
+            )
+
+        def forward(self, X: torch.Tensor):
+            y = X
+            for layer in self.layers:
+                y = layer(y)
+            assert y.size(1) == 1
+            return y
