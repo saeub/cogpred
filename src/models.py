@@ -39,7 +39,7 @@ class Model(ABC):
         # mse = np.mean((np.array(true_ptas) - np.array(pred_ptas)) ** 2)
         mse = sklearn.metrics.mean_squared_error(true_ptas, pred_ptas)
         accuracy = sklearn.metrics.accuracy_score(true_hls, pred_hls)
-        precision = sklearn.metrics.precision_score(true_hls, pred_hls)
+        precision = sklearn.metrics.precision_score(true_hls, pred_hls, zero_division=0)
         recall = sklearn.metrics.recall_score(true_hls, pred_hls)
         f1 = sklearn.metrics.f1_score(true_hls, pred_hls)
         return {
@@ -70,18 +70,24 @@ class CNN(Model):
             super().__init__()
             self.layers = nn.ModuleList(
                 [
-                    nn.LayerNorm([128, 1306]),
+                    nn.BatchNorm1d(128),
                     nn.Conv1d(128, 64, kernel_size=32),
+                    nn.BatchNorm1d(64),
+                    nn.ReLU(),
+                    nn.Dropout(),
                     nn.MaxPool1d(4),
-                    nn.LayerNorm([64, 318]),
                     nn.Conv1d(64, 32, kernel_size=16),
+                    nn.BatchNorm1d(32),
+                    nn.ReLU(),
+                    nn.Dropout(),
                     nn.MaxPool1d(4),
-                    nn.LayerNorm([32, 75]),
-                    nn.Conv1d(32, 16, kernel_size=8),
+                    nn.Conv1d(32, 32, kernel_size=16),
+                    nn.BatchNorm1d(32),
+                    nn.ReLU(),
+                    nn.Dropout(),
                     nn.MaxPool1d(4),
-                    nn.LayerNorm([16, 17]),
                     nn.Flatten(),
-                    nn.Linear(272, 16),
+                    nn.Linear(480, 16),
                     nn.Linear(16, 1),
                 ]
             )
@@ -131,8 +137,9 @@ class CNN(Model):
                 loss.backward()
                 optimizer.step()
                 epoch_loss += loss.item()
+            train_metrics = self.evaluate(train_subjects)
             val_metrics = self.evaluate(validate_subjects)
-            print(f"Epoch {epoch}: loss={epoch_loss}, val_metrics={val_metrics}")
+            print(f"Epoch {epoch}: loss={epoch_loss}\n{train_metrics=}\n{val_metrics=}")
 
     def predict(self, subject: Subject) -> float:
         # TODO: Use configurable batch size
@@ -152,13 +159,13 @@ class TFRCNN(CNN):
             self.layers = nn.ModuleList(
                 [
                     nn.Flatten(1, 2),  # Combine channel and frequency dimensions
-                    nn.LayerNorm([6400, 41]),
+                    nn.BatchNorm1d(6400),
                     nn.Conv1d(6400, 64, kernel_size=4),
+                    nn.BatchNorm1d(64),
                     nn.MaxPool1d(2),
-                    nn.LayerNorm([64, 19]),
                     nn.Conv1d(64, 32, kernel_size=4),
+                    nn.BatchNorm1d(32),
                     nn.MaxPool1d(2),
-                    nn.LayerNorm([32, 8]),
                     nn.Flatten(),
                     nn.Linear(256, 16),
                     nn.Linear(16, 1),

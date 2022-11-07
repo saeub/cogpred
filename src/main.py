@@ -29,10 +29,10 @@ def main(argv: Optional[Sequence[str]] = None):
     random.shuffle(subject_ids)
 
     logger.info("Loading...")
-    subjects = [Subject.load(subject_id, tfr=True) for subject_id in subject_ids]
+    subjects = [Subject.load(subject_id, tfr=False) for subject_id in subject_ids]
 
     logger.info("Training...")
-    mean_scores = crossvalidate(models.TFRCNN, subjects, 6, {}, device=device)
+    mean_scores = crossvalidate(models.CNN, subjects, 10, {"epochs": 20}, device=device)
     print(mean_scores)
 
 

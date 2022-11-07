@@ -11,7 +11,7 @@
     - `raw/EEG/${subject_id}/`: raw EEG data (1 folder per subject)
         - `EEG1/${subject_id}_Termin1_CogTAiL.bdf`: raw EEG data file
     - `preproccessed`
-        - `eeg`: preprocessed EEG data (NumPy)
+        - `eeg`: preprocessed EEG data (PyTorch)
         - `measurements`: auditory and cognitive measurements
             - `PTA.csv`: auditory threshold measurements
             - `cognitive_measures.csv`: cognitive measurements

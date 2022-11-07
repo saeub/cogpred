@@ -207,7 +207,7 @@ SUBJECT_IDS = [
     "4smdfr",
     "4tzxge",
     "4w2ugi",
-    "57yhxc",
+    # "57yhxc",  # PTA missing
     "5brg9a",
     "5cyshu",
     "5j390m",
