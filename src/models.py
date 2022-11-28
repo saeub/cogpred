@@ -9,7 +9,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 import const as C
-from data import EEGDataset, Subject, SubjectEEGDataset
+from data import EEGDataset, Subject
 
 
 class Model(ABC):
