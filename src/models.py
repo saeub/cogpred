@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Collection, Dict
+from typing import Collection, Dict, Sequence
 
 import numpy as np
 import sklearn.metrics
@@ -9,15 +9,15 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 import const as C
-from data import EEGDataset, Subject
+from data import EEGDataset, Subject, SubjectEEGDataset
 
 
 class Model(ABC):
     @abstractmethod
     def train(
         self,
-        train_subjects: Collection[Subject],
-        validate_subjects: Collection[Subject],
+        train_subjects: Sequence[Subject],
+        validate_subjects: Sequence[Subject],
     ):
         raise NotImplementedError()
 
@@ -25,7 +25,7 @@ class Model(ABC):
     def predict(self, subject: Subject) -> float:
         raise NotImplementedError()
 
-    def evaluate(self, test_subjects: Collection[Subject]) -> Dict[str, float]:
+    def evaluate(self, test_subjects: Sequence[Subject]) -> Dict[str, float]:
         pred_ptas = []
         true_ptas = []
         pred_hls = []
@@ -36,7 +36,6 @@ class Model(ABC):
             true_ptas.append(subject.pta)
             pred_hls.append(pred_pta > C.HEARING_LOSS_THRESHOLD)
             true_hls.append(subject.pta > C.HEARING_LOSS_THRESHOLD)
-        # mse = np.mean((np.array(true_ptas) - np.array(pred_ptas)) ** 2)
         mse = sklearn.metrics.mean_squared_error(true_ptas, pred_ptas)
         accuracy = sklearn.metrics.accuracy_score(true_hls, pred_hls)
         precision = sklearn.metrics.precision_score(true_hls, pred_hls, zero_division=0)
@@ -54,8 +53,8 @@ class Model(ABC):
 class MeanDummy(Model):
     def train(
         self,
-        train_subjects: Collection[Subject],
-        validate_subjects: Collection[Subject],
+        train_subjects: Sequence[Subject],
+        validate_subjects: Sequence[Subject],
     ):
         labels = [subject.pta for subject in train_subjects]
         self.mean_label = np.mean(labels)
@@ -70,25 +69,31 @@ class CNN(Model):
             super().__init__()
             self.layers = nn.ModuleList(
                 [
-                    nn.BatchNorm1d(128),
+                    nn.LayerNorm((128, 1306)),
+                    # nn.BatchNorm1d(128),
                     nn.Conv1d(128, 64, kernel_size=32),
-                    nn.BatchNorm1d(64),
+                    nn.LayerNorm((64, 1275)),
+                    # nn.BatchNorm1d(64),
                     nn.ReLU(),
-                    nn.Dropout(),
+                    # nn.Dropout(),
                     nn.MaxPool1d(4),
-                    nn.Conv1d(64, 32, kernel_size=16),
-                    nn.BatchNorm1d(32),
+                    nn.Conv1d(64, 32, kernel_size=32),
+                    nn.LayerNorm((32, 287)),
+                    # nn.BatchNorm1d(32),
                     nn.ReLU(),
-                    nn.Dropout(),
+                    # nn.Dropout(),
                     nn.MaxPool1d(4),
-                    nn.Conv1d(32, 32, kernel_size=16),
-                    nn.BatchNorm1d(32),
+                    nn.Conv1d(32, 32, kernel_size=32),
+                    nn.LayerNorm((32, 40)),
+                    # nn.BatchNorm1d(32),
                     nn.ReLU(),
-                    nn.Dropout(),
+                    # nn.Dropout(),
                     nn.MaxPool1d(4),
                     nn.Flatten(),
-                    nn.Linear(480, 16),
-                    nn.Linear(16, 1),
+                    nn.LayerNorm((320,)),
+                    nn.Linear(320, 50),
+                    nn.LayerNorm((50,)),
+                    nn.Linear(50, 1),
                 ]
             )
 
@@ -99,7 +104,7 @@ class CNN(Model):
             assert y.size(1) == 1
             return y
 
-    def __init__(self, *, epochs: int = 20, batch_size: int = 8, device: str = "cpu"):
+    def __init__(self, *, epochs: int = 20, batch_size: int = 32, device: str = "cpu"):
         self.epochs = epochs
         self.batch_size = batch_size
         self.device = device
@@ -113,8 +118,8 @@ class CNN(Model):
 
     def train(
         self,
-        train_subjects: Collection[Subject],
-        validate_subjects: Collection[Subject],
+        train_subjects: Sequence[Subject],
+        validate_subjects: Sequence[Subject],
     ):
         self.label_mean = np.mean([subject.pta for subject in train_subjects])
         self.label_std = np.std([subject.pta for subject in train_subjects])
@@ -139,7 +144,7 @@ class CNN(Model):
                 epoch_loss += loss.item()
             train_metrics = self.evaluate(train_subjects)
             val_metrics = self.evaluate(validate_subjects)
-            print(f"Epoch {epoch}: loss={epoch_loss}\n{train_metrics=}\n{val_metrics=}")
+            print(f"Epoch {epoch}: loss={epoch_loss}\n  train_metrics: {train_metrics}\n  val_metrics: {val_metrics}")
 
     def predict(self, subject: Subject) -> float:
         # TODO: Use configurable batch size

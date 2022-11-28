@@ -73,8 +73,8 @@ def preprocess(
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--subjects", nargs="+")
-    parser.add_argument("--filter", nargs=2, default=(0.1, 45.0))
-    parser.add_argument("--resample", default=128.0)
+    parser.add_argument("--filter", type=float, nargs=2, default=(0.1, 45.0))
+    parser.add_argument("--resample", type=float, default=128.0)
     parser.add_argument("--tfr", action="store_true")
     return parser.parse_args()
 

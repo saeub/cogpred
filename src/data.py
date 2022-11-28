@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import List, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -23,7 +23,7 @@ class Subject:
 
 
 class EEGDataset(torch.utils.data.Dataset):
-    def __init__(self, subjects: List[Subject]):
+    def __init__(self, subjects: Sequence[Subject]):
         self.X = torch.cat([subject.eeg for subject in subjects])
         self.y = torch.cat(
             [
