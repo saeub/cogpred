@@ -32,7 +32,7 @@ def main(argv: Optional[Sequence[str]] = None):
     subjects = [Subject.load(subject_id, tfr=False) for subject_id in subject_ids]
 
     logger.info("Training...")
-    mean_scores = crossvalidate(models.CNN, subjects, 10, {"epochs": 20}, device=device)
+    mean_scores = crossvalidate(models.CNN, subjects, 10, {"epochs": 20, "upsample": True}, device=device)
     print(mean_scores)
 
 

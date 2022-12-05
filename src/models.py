@@ -104,9 +104,10 @@ class CNN(Model):
             assert y.size(1) == 1
             return y
 
-    def __init__(self, *, epochs: int = 20, batch_size: int = 32, device: str = "cpu"):
+    def __init__(self, *, epochs: int = 20, batch_size: int = 32, upsample: bool = False, device: str = "cpu"):
         self.epochs = epochs
         self.batch_size = batch_size
+        self.upsample = upsample
         self.device = device
         self.module = self._Module().to(self.device)
 
@@ -116,11 +117,26 @@ class CNN(Model):
     def _unstandardize_label(self, label: float) -> float:
         return label * self.label_std + self.label_mean
 
+    def _upsample(self, subjects: Sequence[Subject]) -> Sequence[Subject]:
+        num_hearing_loss = sum(subject.pta > C.HEARING_LOSS_THRESHOLD for subject in subjects)
+        factor = round(num_hearing_loss / (len(subjects) - num_hearing_loss))
+        upsampled_subjects = []
+        for subject in subjects:
+            if subject.pta <= C.HEARING_LOSS_THRESHOLD:
+                upsampled_subjects.extend([subject] * factor)
+            else:
+                upsampled_subjects.append(subject)
+        print(f"Upsampled {num_hearing_loss}/{len(subjects)} -> {sum(subject.pta > C.HEARING_LOSS_THRESHOLD for subject in upsampled_subjects)}/{len(upsampled_subjects)}")
+        return upsampled_subjects
+
     def train(
         self,
         train_subjects: Sequence[Subject],
         validate_subjects: Sequence[Subject],
     ):
+        if self.upsample:
+            train_subjects = self._upsample(train_subjects)
+
         self.label_mean = np.mean([subject.pta for subject in train_subjects])
         self.label_std = np.std([subject.pta for subject in train_subjects])
 
