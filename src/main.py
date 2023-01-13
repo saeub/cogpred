@@ -28,11 +28,16 @@ def main(argv: Optional[Sequence[str]] = None):
     subject_ids = C.SUBJECT_IDS[:]
     random.shuffle(subject_ids)
 
+    group_channels = False
+    tfr = False
+
     logger.info("Loading...")
-    subjects = [Subject.load(subject_id, tfr=False) for subject_id in subject_ids]
+    subjects = [Subject.load(subject_id, tfr=tfr, log=False, group_channels=group_channels) for subject_id in subject_ids]
 
     logger.info("Training...")
-    mean_scores = crossvalidate(models.CNN, subjects, 10, {"epochs": 20, "upsample": True}, device=device)
+    input_channels = len(C.CHANNEL_GROUPS) if group_channels else len(C.CHANNELS)
+    model_class = models.TFRCNN if tfr else models.CNN
+    mean_scores = crossvalidate(model_class, subjects, 10, {"input_channels": input_channels, "epochs": 40, "upsample": True}, device=device)
     print(mean_scores)
 
 

@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Collection, Dict, Sequence
+from typing import Dict, Sequence
 
 import numpy as np
 import sklearn.metrics
@@ -25,24 +25,21 @@ class Model(ABC):
     def predict(self, subject: Subject) -> float:
         raise NotImplementedError()
 
-    def evaluate(self, test_subjects: Sequence[Subject]) -> Dict[str, float]:
-        pred_ptas = []
-        true_ptas = []
-        pred_hls = []
-        true_hls = []
+    def evaluate(self, test_subjects: Sequence[Subject], verbose: bool = False) -> Dict[str, float]:
+        pred = []
+        true = []
         for subject in test_subjects:
-            pred_pta = self.predict(subject)
-            pred_ptas.append(pred_pta)
-            true_ptas.append(subject.pta)
-            pred_hls.append(pred_pta > C.HEARING_LOSS_THRESHOLD)
-            true_hls.append(subject.pta > C.HEARING_LOSS_THRESHOLD)
-        mse = sklearn.metrics.mean_squared_error(true_ptas, pred_ptas)
-        accuracy = sklearn.metrics.accuracy_score(true_hls, pred_hls)
-        precision = sklearn.metrics.precision_score(true_hls, pred_hls, zero_division=0)
-        recall = sklearn.metrics.recall_score(true_hls, pred_hls)
-        f1 = sklearn.metrics.f1_score(true_hls, pred_hls)
+            p = self.predict(subject)
+            t = subject.pta > C.HEARING_LOSS_THRESHOLD
+            pred.append(p > 0.5)
+            true.append(t)
+            if verbose:
+                print(f"Subject {subject.id}: true={t:d}, pred={p:.2f}")
+        accuracy = sklearn.metrics.accuracy_score(true, pred)
+        precision = sklearn.metrics.precision_score(true, pred, zero_division=0)
+        recall = sklearn.metrics.recall_score(true, pred)
+        f1 = sklearn.metrics.f1_score(true, pred)
         return {
-            "mse": mse,
             "accuracy": accuracy,
             "precision": precision,
             "recall": recall,
@@ -50,50 +47,37 @@ class Model(ABC):
         }
 
 
-class MeanDummy(Model):
-    def train(
-        self,
-        train_subjects: Sequence[Subject],
-        validate_subjects: Sequence[Subject],
-    ):
-        labels = [subject.pta for subject in train_subjects]
-        self.mean_label = np.mean(labels)
-
-    def predict(self, subject: Subject) -> float:
-        return self.mean_label
-
-
 class CNN(Model):
     class _Module(nn.Module):
-        def __init__(self):
+        def __init__(self, input_channels: int):
             super().__init__()
             self.layers = nn.ModuleList(
                 [
-                    nn.LayerNorm((128, 1306)),
-                    # nn.BatchNorm1d(128),
-                    nn.Conv1d(128, 64, kernel_size=32),
-                    nn.LayerNorm((64, 1275)),
-                    # nn.BatchNorm1d(64),
+                    nn.BatchNorm1d(input_channels),
+
+                    nn.Conv1d(input_channels, 64, kernel_size=32),
+                    nn.BatchNorm1d(64),
                     nn.ReLU(),
-                    # nn.Dropout(),
+                    nn.Dropout(),
                     nn.MaxPool1d(4),
+
                     nn.Conv1d(64, 32, kernel_size=32),
-                    nn.LayerNorm((32, 287)),
-                    # nn.BatchNorm1d(32),
+                    nn.BatchNorm1d(32),
                     nn.ReLU(),
-                    # nn.Dropout(),
+                    nn.Dropout(),
                     nn.MaxPool1d(4),
+
                     nn.Conv1d(32, 32, kernel_size=32),
-                    nn.LayerNorm((32, 40)),
-                    # nn.BatchNorm1d(32),
+                    nn.BatchNorm1d(32),
                     nn.ReLU(),
-                    # nn.Dropout(),
+                    nn.Dropout(),
                     nn.MaxPool1d(4),
+
                     nn.Flatten(),
-                    nn.LayerNorm((320,)),
                     nn.Linear(320, 50),
-                    nn.LayerNorm((50,)),
+                    nn.ReLU(),
                     nn.Linear(50, 1),
+                    nn.Sigmoid(),
                 ]
             )
 
@@ -104,17 +88,17 @@ class CNN(Model):
             assert y.size(1) == 1
             return y
 
-    def __init__(self, *, epochs: int = 20, batch_size: int = 32, upsample: bool = False, device: str = "cpu"):
+    def __init__(self, *, input_channels: int, epochs: int = 20, batch_size: int = 32, upsample: bool = False, device: str = "cpu"):
         self.epochs = epochs
         self.batch_size = batch_size
         self.upsample = upsample
         self.device = device
-        self.module = self._Module().to(self.device)
+        self.module = self._Module(input_channels).to(self.device)
 
-    def _standardize_label(self, label: float) -> float:
+    def _standardize_label(self, label: torch.Tensor) -> torch.Tensor:
         return (label - self.label_mean) / self.label_std
 
-    def _unstandardize_label(self, label: float) -> float:
+    def _unstandardize_label(self, label: torch.Tensor) -> torch.Tensor:
         return label * self.label_std + self.label_mean
 
     def _upsample(self, subjects: Sequence[Subject]) -> Sequence[Subject]:
@@ -151,15 +135,17 @@ class CNN(Model):
             for X, y in loader:
                 X = X.to(self.device)
                 y = y.to(self.device)
-                y = self._standardize_label(y)
+                ce_weight = (y - C.HEARING_LOSS_THRESHOLD) ** 2 + 10
+                ce_weight = ce_weight / ce_weight.sum()
+                y = (y > C.HEARING_LOSS_THRESHOLD).float()
                 optimizer.zero_grad()
                 y_pred = self.module(X)
-                loss = F.mse_loss(y_pred.squeeze(), y.squeeze())
+                loss = F.binary_cross_entropy(y_pred.squeeze(), y.squeeze())
                 loss.backward()
                 optimizer.step()
                 epoch_loss += loss.item()
             train_metrics = self.evaluate(train_subjects)
-            val_metrics = self.evaluate(validate_subjects)
+            val_metrics = self.evaluate(validate_subjects, verbose=True)
             print(f"Epoch {epoch}: loss={epoch_loss}\n  train_metrics: {train_metrics}\n  val_metrics: {val_metrics}")
 
     def predict(self, subject: Subject) -> float:
@@ -169,33 +155,32 @@ class CNN(Model):
         X = X.to(self.device)
         y_pred = self.module(X)
         y_pred = torch.mean(y_pred).item()
-        y_pred = self._unstandardize_label(y_pred)
         return y_pred
 
 
 class TFRCNN(CNN):
-    class _Module(nn.Module):
-        def __init__(self):
-            super().__init__()
+    class _Module(CNN._Module):
+        def __init__(self, input_channels: int):
+            super().__init__(input_channels)
             self.layers = nn.ModuleList(
                 [
                     nn.Flatten(1, 2),  # Combine channel and frequency dimensions
-                    nn.BatchNorm1d(6400),
-                    nn.Conv1d(6400, 64, kernel_size=4),
+                    nn.BatchNorm1d(input_channels * C.TFR_RESOLUTION),
+
+                    nn.Conv1d(input_channels * C.TFR_RESOLUTION, 64, kernel_size=16),
+                    nn.Conv1d(250, 64, kernel_size=16),
                     nn.BatchNorm1d(64),
-                    nn.MaxPool1d(2),
-                    nn.Conv1d(64, 32, kernel_size=4),
-                    nn.BatchNorm1d(32),
-                    nn.MaxPool1d(2),
+                    nn.ReLU(),
+
+                    nn.Conv1d(64, 64, kernel_size=16),
+                    nn.BatchNorm1d(64),
+                    nn.ReLU(),
+                    nn.MaxPool1d(4),
+
                     nn.Flatten(),
-                    nn.Linear(256, 16),
-                    nn.Linear(16, 1),
+                    nn.Linear(128, 32),
+                    nn.ReLU(),
+                    nn.Linear(32, 1),
+                    nn.Sigmoid(),
                 ]
             )
-
-        def forward(self, X: torch.Tensor):
-            y = X
-            for layer in self.layers:
-                y = layer(y)
-            assert y.size(1) == 1
-            return y

@@ -1,7 +1,6 @@
 from dataclasses import dataclass
-from typing import List, Sequence, Tuple
+from typing import Sequence, Tuple
 
-import numpy as np
 import pandas as pd
 import torch
 
@@ -15,10 +14,28 @@ class Subject:
     pta: float
 
     @staticmethod
-    def load(subject_id: str, tfr: bool = False, device: str = "cpu") -> "Subject":
+    def load(subject_id: str, tfr: bool = False, log: bool = False, group_channels: bool = False, device: str = "cpu") -> "Subject":
         filename = f"{subject_id}.tfr.pt" if tfr else f"{subject_id}.pt"
-        eeg = torch.load(C.EEG_DATA_PATH / filename, device).type(torch.float32)
+        eeg: torch.Tensor = torch.load(C.EEG_DATA_PATH / filename, device).type(torch.float32)
+
+        if log:
+            eeg = torch.log(eeg + 1)
+
+        if group_channels:
+            groups = {}
+            for group in C.CHANNEL_GROUPS:
+                for i, channel in enumerate(C.CHANNELS):
+                    if channel[1] == group:
+                        groups.setdefault(group, []).append(i)
+            eeg = torch.stack([eeg[:, groups[group], :].mean(dim=1) for group in groups], dim=1)
+
+
+        assert not torch.isnan(eeg).any(), f"Subject {subject_id} has nan values in EEG data"
+        assert not torch.isinf(eeg).any(), f"Subject {subject_id} has inf values in EEG data"
+
         pta = pd.read_csv(C.PTA_DATA_PATH, index_col="pbn_code")["PTA"][subject_id]
+        assert isinstance(pta, float)
+
         return Subject(subject_id, eeg, pta)
 
 
