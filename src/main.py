@@ -37,7 +37,7 @@ def main(argv: Optional[Sequence[str]] = None):
     logger.info("Training...")
     input_channels = len(C.CHANNEL_GROUPS) if group_channels else len(C.CHANNELS)
     model_class = models.TFRCNN if tfr else models.CNN
-    mean_scores = crossvalidate(model_class, subjects, 10, {"input_channels": input_channels, "epochs": 40, "upsample": True}, device=device)
+    mean_scores = crossvalidate(model_class, subjects, 10, {"input_channels": input_channels, "max_epochs": 40, "upsample": True, "device": device, "optimize_metric": "f1"})
     print(mean_scores)
 
 

@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Sequence
+import copy
+from typing import Dict, Optional, Sequence
 
 import numpy as np
 import sklearn.metrics
@@ -88,9 +89,11 @@ class CNN(Model):
             assert y.size(1) == 1
             return y
 
-    def __init__(self, *, input_channels: int, epochs: int = 20, batch_size: int = 32, upsample: bool = False, device: str = "cpu"):
-        self.epochs = epochs
+    def __init__(self, *, input_channels: int, max_epochs: int = 20, batch_size: int = 32, optimize_metric: Optional[str] = None, patience: int = 5, upsample: bool = False, device: str = "cpu"):
+        self.max_epochs = max_epochs
         self.batch_size = batch_size
+        self.optimize_metric = optimize_metric
+        self.patience = patience
         self.upsample = upsample
         self.device = device
         self.module = self._Module(input_channels).to(self.device)
@@ -127,7 +130,13 @@ class CNN(Model):
         self.module.train()
         optimizer = optim.Adam(self.module.parameters())
         dataset = EEGDataset(train_subjects)
-        for epoch in range(self.epochs):
+
+        # Early stopping
+        best_checkpoint = None
+        best_metric = None
+        epochs_since_best = 0
+
+        for epoch in range(self.max_epochs):
             loader = torch.utils.data.DataLoader(
                 dataset, batch_size=self.batch_size, shuffle=True
             )
@@ -146,7 +155,20 @@ class CNN(Model):
                 epoch_loss += loss.item()
             train_metrics = self.evaluate(train_subjects)
             val_metrics = self.evaluate(validate_subjects, verbose=True)
-            print(f"Epoch {epoch}: loss={epoch_loss}\n  train_metrics: {train_metrics}\n  val_metrics: {val_metrics}")
+            if self.optimize_metric is not None:
+                if best_checkpoint is None or val_metrics[self.optimize_metric] > best_metric:
+                    best_checkpoint = copy.deepcopy(self.module.state_dict())
+                    best_metric = val_metrics[self.optimize_metric]
+                    epochs_since_best = 0
+                else:
+                    epochs_since_best += 1
+            print(f"Epoch {epoch + 1}: loss={epoch_loss}\n  train_metrics: {train_metrics}\n  val_metrics: {val_metrics}")
+            if epochs_since_best > self.patience:
+                print(f"Early stopping after {epoch + 1} epochs")
+                break
+        if best_checkpoint is not None:
+            print(f"Restoring best checkpoint with {self.optimize_metric}={best_metric}")
+            self.module.load_state_dict(best_checkpoint)
 
     def predict(self, subject: Subject) -> float:
         # TODO: Use configurable batch size
