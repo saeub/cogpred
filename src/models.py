@@ -87,7 +87,7 @@ class CNN(Model):
             assert y.size(1) == 1
             return y
 
-    def __init__(self, *, input_channels: int, max_epochs: int = 20, batch_size: int = 32, optimize_metric: Optional[str] = None, patience: int = 5, upsample: bool = False, device: str = "cpu"):
+    def __init__(self, *, input_channels: int, max_epochs: int = 20, batch_size: int = 32, optimize_metric: Optional[str] = None, patience: Optional[int] = None, upsample: bool = False, device: str = "cpu"):
         self.max_epochs = max_epochs
         self.batch_size = batch_size
         self.optimize_metric = optimize_metric
@@ -161,7 +161,7 @@ class CNN(Model):
                 else:
                     epochs_since_best += 1
             print(f"Epoch {epoch + 1}: loss={epoch_loss}\n  train_metrics: {train_metrics}\n  val_metrics: {val_metrics}")
-            if epochs_since_best > self.patience:
+            if self.patience is not None and epochs_since_best > self.patience:
                 print(f"Early stopping after {epoch + 1} epochs")
                 break
         if best_checkpoint is not None:
