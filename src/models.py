@@ -32,19 +32,17 @@ class Model(ABC):
         for subject in test_subjects:
             p = self.predict(subject)
             t = subject.pta > C.HEARING_LOSS_THRESHOLD
-            pred.append(p > 0.5)
+            pred.append(p)
             true.append(t)
             if verbose:
                 print(f"Subject {subject.id}: true={t:d}, pred={p:.2f}")
-        accuracy = sklearn.metrics.accuracy_score(true, pred)
-        precision = sklearn.metrics.precision_score(true, pred, zero_division=0)
-        recall = sklearn.metrics.recall_score(true, pred)
-        f1 = sklearn.metrics.f1_score(true, pred)
+        pred_binary = [p > 0.5 for p in pred]
         return {
-            "accuracy": accuracy,
-            "precision": precision,
-            "recall": recall,
-            "f1": f1,
+            "accuracy": sklearn.metrics.accuracy_score(true, pred_binary),
+            "precision": sklearn.metrics.precision_score(true, pred_binary, zero_division=0),
+            "recall": sklearn.metrics.recall_score(true, pred_binary),
+            "f1": sklearn.metrics.f1_score(true, pred_binary),
+            "auc": sklearn.metrics.roc_auc_score(true, pred),
         }
 
 
