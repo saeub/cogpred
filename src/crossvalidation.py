@@ -12,6 +12,7 @@ def crossvalidate(
     num_folds: int,
     model_kwargs: Dict[str, Any],
 ):
+    # TODO: Distribute labels evenly across folds
     fold_size = len(subjects) // num_folds
     fold_scores = {}
     for i in range(num_folds):

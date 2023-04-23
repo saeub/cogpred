@@ -14,6 +14,7 @@ HEARING_LOSS_THRESHOLD = 25.0
 TFR_RESOLUTION = 50
 EVENT_QUIET_START = 170
 EVENT_QUIET_STOP = 240
+# TODO: 9 groups, ignore outermost channels
 CHANNELS = [
     ("1-A1", "center"),
     ("1-A2", "center"),

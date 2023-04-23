@@ -48,7 +48,7 @@ class Model(ABC):
 
 class CNN(Model):
     class _Module(nn.Module):
-        def __init__(self, input_channels: int):
+        def __init__(self, input_channels: int, dropout: float):
             super().__init__()
             self.layers = nn.ModuleList(
                 [
@@ -57,19 +57,19 @@ class CNN(Model):
                     nn.Conv1d(input_channels, 64, kernel_size=32),
                     nn.BatchNorm1d(64),
                     nn.ReLU(),
-                    nn.Dropout(),
+                    nn.Dropout(dropout),
                     nn.MaxPool1d(4),
 
                     nn.Conv1d(64, 32, kernel_size=32),
                     nn.BatchNorm1d(32),
                     nn.ReLU(),
-                    nn.Dropout(),
+                    nn.Dropout(dropout),
                     nn.MaxPool1d(4),
 
                     nn.Conv1d(32, 32, kernel_size=32),
                     nn.BatchNorm1d(32),
                     nn.ReLU(),
-                    nn.Dropout(),
+                    nn.Dropout(dropout),
                     nn.MaxPool1d(4),
 
                     nn.Flatten(),
@@ -87,14 +87,15 @@ class CNN(Model):
             assert y.size(1) == 1
             return y
 
-    def __init__(self, *, input_channels: int, max_epochs: int = 20, batch_size: int = 32, optimize_metric: Optional[str] = None, patience: Optional[int] = None, upsample: bool = False, device: str = "cpu"):
+    def __init__(self, *, input_channels: int, dropout: float = 0.0, max_epochs: int = 40, batch_size: int = 32, optimize_metric: Optional[str] = None, patience: Optional[int] = None, upsample: bool = False, majority_vote: bool = False, device: str = "cpu"):
         self.max_epochs = max_epochs
         self.batch_size = batch_size
         self.optimize_metric = optimize_metric
         self.patience = patience
         self.upsample = upsample
+        self.majority_vote = majority_vote
         self.device = device
-        self.module = self._Module(input_channels).to(self.device)
+        self.module = self._Module(input_channels, dropout).to(self.device)
 
     def _standardize_label(self, label: torch.Tensor) -> torch.Tensor:
         return (label - self.label_mean) / self.label_std
@@ -174,27 +175,32 @@ class CNN(Model):
         X = subject.eeg
         X = X.to(self.device)
         y_pred = self.module(X)
-        y_pred = torch.mean(y_pred).item()
+        if self.majority_vote:
+            num_positive = torch.sum(y_pred > 0.5).item()
+            y_pred = num_positive / y_pred.size(0)
+        else:
+            y_pred = torch.mean(y_pred).item()
         return y_pred
 
 
 class TFRCNN(CNN):
     class _Module(CNN._Module):
-        def __init__(self, input_channels: int):
-            super().__init__(input_channels)
+        def __init__(self, input_channels: int, dropout: float):
+            super().__init__(input_channels, dropout)
             self.layers = nn.ModuleList(
                 [
                     nn.Flatten(1, 2),  # Combine channel and frequency dimensions
                     nn.BatchNorm1d(input_channels * C.TFR_RESOLUTION),
 
                     nn.Conv1d(input_channels * C.TFR_RESOLUTION, 64, kernel_size=16),
-                    nn.Conv1d(250, 64, kernel_size=16),
                     nn.BatchNorm1d(64),
                     nn.ReLU(),
+                    nn.Dropout(dropout),
 
                     nn.Conv1d(64, 64, kernel_size=16),
                     nn.BatchNorm1d(64),
                     nn.ReLU(),
+                    nn.Dropout(dropout),
                     nn.MaxPool1d(4),
 
                     nn.Flatten(),
