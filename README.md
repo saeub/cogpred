@@ -1,5 +1,7 @@
 # CogPred
 
+Experiments in predicting hearing loss (based on pure tone average (PTA)) from EEG recordings.
+
 ## Setup
 
 - `pip install -r requirements.txt`
@@ -17,6 +19,8 @@
             - `cognitive_measures.csv`: cognitive measurements
 
 ## EEG preprocessing
+
+We only perform minimal automatic preprocessing (cropping/aligning, bandpass filtering, and optional time-frequency analysis).
 
 1. Make sure that all the raw data files are linked/mounted in the directory structure described above.
 2. Run `python src/preprocess.py` with subject IDs as arguments. To preprocess all: `ls data/raw/EEG/ | xargs python src/preprocess.py`  
@@ -49,3 +53,4 @@ In the table below, accuracy, F1, and area under the ROC curve (AUC) are the mea
 
 - Regression instead of classification (didn't learn anything)
 - Not upsampling the minority class (didn't learn anything or very slowly)
+- Predicting n-back performance instead of PTA (wasn't any easier)
